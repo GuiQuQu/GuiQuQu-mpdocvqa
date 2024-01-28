@@ -35,9 +35,17 @@ class TrainingArgumentsWithMyDefault(TrainingArguments):
         default=True,
         metadata={"help": ("Whether to run eval on the dev set.")},
     )
+    do_predict: bool = field(
+        default=False,
+        metadata={"help": ("Whether to run predictions on the test set.")},
+    )
     bf16: bool = field(
-        default=True,
+        default=False,
         metadata={"help": ("Whether to use bf16.")},
+    )
+    fp16: bool = field(
+        default=True,
+        metadata={"help": ("Whether to use fp16.")},
     )
     evaluation_strategy: str = field(
         default="epoch",
@@ -57,7 +65,11 @@ class TrainingArgumentsWithMyDefault(TrainingArguments):
     )
     gradient_accumulation_steps: int = field(
         default=1,
-        metadata={"help": ("Number of updates steps to accumulate before performing a backward/update pass.")},
+        metadata={
+            "help": (
+                "Number of updates steps to accumulate before performing a backward/update pass."
+            )
+        },
     )
     weight_delay: float = field(
         default=0.01,
@@ -84,26 +96,38 @@ class TrainingArgumentsWithMyDefault(TrainingArguments):
         metadata={"help": ("The report strategy to use.")},
     )
 
+
+pretrained_model_name_or_path = "Qwen/Qwen-VL-Chat"
+
+
 @dataclass
 class ModelArguments:
     model_name_or_path: str = field(
-        default="../pretrain-model/QWen-VL-Chat",
+        default=pretrained_model_name_or_path,
         metadata={"help": ("The model checkpoint for weights initialization.")},
     )
     # tokenizer
     config_name_or_path: str = field(
-        default="../pretrain-model/QWen-VL-Chat",
+        default=pretrained_model_name_or_path,
         metadata={"help": ("The name of the config.")},
     )
     tokenizer_name_or_path: str = field(
-        default="../pretrain-model/QWen-VL-Chat",
+        default=pretrained_model_name_or_path,
         metadata={"help": ("The name of the tokenizer.")},
     )
     cache_dir: Optional[str] = field(
-        default=None,
+        default="/root/autodl-tmp/pretrain-model",
         metadata={
             "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
         },
+    )
+    classification_head_hidden_size: Optional[int] = field(
+        default=4096,
+        metadata={"help": ("The hidden size of classification head.")},
+    )
+    num_pages: Optional[int] = field(
+        default=20,
+        metadata={"help": ("The number of pages.")},
     )
 
 
@@ -123,28 +147,31 @@ class ModelArgumentsWithLora(ModelArguments):
     )
 
 
+DATA_DIR = "/root/autodl-tmp/data"
+
+
 @dataclass
 class DataTrainingArguments:
     # dataset
     train_json_path: Optional[str] = field(
-        default="../data/MPDocVQA/train.json",
+        default=f"{DATA_DIR}/train_filter.json",
         metadata={"help": ("The path of train dataset.")},
     )
     eval_json_path: Optional[str] = field(
-        default="../data/MPDocVQA/val.json",
+        default=f"{DATA_DIR}/val_filter.json",
         metadata={"help": ("The path of eval dataset.")},
     )
     test_json_path: Optional[str] = field(
-        default="../data/MPDocVQA/test.json",
+        default=f"{DATA_DIR}/test.json",
         metadata={"help": ("The path of test dataset.")},
     )
     image_dir: str = field(
-        default="../data/MPDocVQA/images",
+        default=f"{DATA_DIR}/images",
         metadata={"help": ("The path of images.")},
     )
     # tokenizer
     padding_side: str = field(
-        default="left",
+        default="right",
         metadata={"help": ("The padding side for the tokenizer.")},
     )
     max_seq_length: int = field(

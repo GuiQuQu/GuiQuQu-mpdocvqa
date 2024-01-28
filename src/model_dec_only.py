@@ -17,9 +17,9 @@ class MPModelConfig(QWenConfig):
     def __init__(
         self, classification_head_hidden_size: int = 4096, num_pages: int = 20, **kwargs
     ):
+        super().__init__(**kwargs)
         self.classification_head_hidden_size = classification_head_hidden_size
         self.num_pages = num_pages
-        super.__init__(**kwargs)
 
 
 class ClassificationHeadForPageIndex(nn.Module):
@@ -66,8 +66,8 @@ class MPModel(PreTrainedModel):
     def __init__(self, config: MPModelConfig, qwen_vl: QWenLMHeadModel):
         super().__init__(config)
         self.qwen_vl = qwen_vl
-        if not hasattr(self.qwen_vl, "generation_config"):
-            raise ValueError("qwen_vl need has 'generation_config' attr to generate")
+        # if not hasattr(self.qwen_vl, "generation_config"):
+        #     raise ValueError("qwen_vl need has 'generation_config' attr to generate")
         self.head = ClassificationHeadForPageIndex(config)
 
     def get_cast_dtype(self):

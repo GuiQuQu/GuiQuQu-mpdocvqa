@@ -16,6 +16,8 @@ from qwen_vl import QWenTokenizer
     用于model_dec_only.py的数据据
     利用clip模型对图像数据进行了过滤
 """
+
+
 class MPDocVQADataset(Dataset):
     def __init__(
         self,
@@ -59,7 +61,7 @@ class MPDocVQADataset(Dataset):
             answer_page_index = item["answer_page_idx"]
             prompt += answer
 
-        print(prompt)
+        # print(prompt)
         tokenizer_outputs = self.tokenizer(
             prompt, return_tensors="pt", padding="max_length", truncation=True
         )
@@ -97,12 +99,31 @@ class MPDocVQADataset(Dataset):
         return prompt
 
 
-def test_MPDocVQADataset():
-    from qwen_vl import QWenLMHeadModel
-    from model3 import MPModel, MPModelConfig, load_lora_qwen_vl_model
+def collate_fn_for_mp_doc_vqa(batch):
+    """
+    batch: List[Dict]
+    """
+    bsz = len(batch)
+    input_ids = torch.stack([item["input_ids"] for item in batch])
+    attention_mask = torch.stack([item["attention_mask"] for item in batch])
+    labels = torch.stack([item["labels"] for item in batch])
+    page_idx_labels = torch.stack([item["page_idx_labels"] for item in batch])
+    return {
+        "input_ids": input_ids.view(bsz, -1),
+        "attention_mask": attention_mask.view(bsz, -1),
+        "labels": labels.view(bsz, -1),
+        "page_idx_labels": page_idx_labels.view(bsz),
+    }
 
+
+def test_MPDocVQADataset():
+    from qwen_vl_chat import QWenLMHeadModel
+    from model_dec_only import MPModel, MPModelConfig, load_lora_qwen_vl_model
+
+    pretrained_model_name_or_path = "Qwen/Qwen-VL-Chat"
     tokenizer = QWenTokenizer.from_pretrained(
-        "../pretrain-model/QWen-VL",
+        pretrained_model_name_or_path,
+        cache_dir="/root/autodl-tmp/pretrain-model",
         model_max_length=1024,
         padding_side="right",
     )
@@ -110,28 +131,42 @@ def test_MPDocVQADataset():
     tokenizer.eos_token = "<|endoftext|>"
 
     config = MPModelConfig.from_pretrained(
-        "../pretrain-model/QWen-VL", classification_head_hidden_size=4096, num_pages=20
+        pretrained_model_name_or_path,
+        cache_dir="/root/autodl-tmp/pretrain-model",
+        classification_head_hidden_size=4096,
+        num_pages=20,
     )
-    config.bf16 = True
+    # config.bf16 = True
+    config.fp16 = True
+    config.use_cache = False
     qwen_vl = QWenLMHeadModel.from_pretrained(
-        "../pretrain-model/QWen-VL", config=config, device_map="cuda:0"
+        pretrained_model_name_or_path,
+        cache_dir="/root/autodl-tmp/pretrain-model",
+        config=config,
+        device_map="cuda:0",
     )
     qwen_vl_lora = load_lora_qwen_vl_model(
         qwen_vl=qwen_vl, r=1, lora_alpha=32, lora_dropout=0.1
     )
     mp_model = MPModel(config=config, qwen_vl=qwen_vl_lora)
-
+    mp_model.train()
+    json_path = "/root/autodl-tmp/data/val_filter.json"
+    image_dir = "/root/autodl-tmp/data/images"
     dataset = MPDocVQADataset(
-        json_path="../data/MPDocVQA/val_filter.json",
-        image_dir="../data/MPDocVQA/images",
+        json_path=json_path,
+        image_dir=image_dir,
         tokenizer=tokenizer,
         split="train",
     )
     for idx, item in enumerate(dataset):
         if idx >= 3:
             break
+        item = {k: v.to("cuda:0") for k, v in item.items()}
+        for k, v in item.items():
+            print(k, v)
         ouputs = mp_model(**item, return_dict=True)
         print(ouputs.loss)
+
 
 if __name__ == "__main__":
     test_MPDocVQADataset()

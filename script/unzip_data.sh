@@ -1,6 +1,6 @@
 # 一键解压mpdocvqa数据
 # DATA_DIR="/home/klwang/code/python/mpdocvqa/data/MPDocVQA"
-DATA_DIR="/home/klwang/code/python/mpdocvqa/test-data"
+DATA_DIR="/root/autodl-tmp/data"
 QAS_ZIP_FILE="qas.zip"
 IMAGE_TAR_FILE="images.tar.gz"
 OCR_TAR_FILE="ocr.tar.gz"
