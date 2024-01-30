@@ -1,5 +1,5 @@
 """
-    训练的模型文件为model3.py
+    训练的模型文件为model_dec_only.py
     架构为qwen-vl+分类头
 """
 import sys
@@ -8,7 +8,12 @@ import torch
 from torch.utils.data import DataLoader
 
 import transformers
-from transformers import Trainer, HfArgumentParser, TrainingArguments
+from transformers import (
+    Trainer,
+    HfArgumentParser,
+    TrainingArguments,
+    BitsAndBytesConfig,
+)
 
 from qwen_vl_chat import QWenTokenizer, QWenLMHeadModel, QWenConfig
 
@@ -16,11 +21,16 @@ from model_dec_only import MPModel, MPModelConfig, load_lora_qwen_vl_model
 from utils import seed_everything
 from model_dec_only_trainer_args import (
     TrainingArgumentsWithMyDefault,
-    ModelArgumentsWithLora,
+    ModelArguments,
+    LoraArguments,
     DataTrainingArguments,
 )
 
-from model_dec_only_dataset import MPDocVQADataset, collate_fn_for_mp_doc_vqa
+from model_dec_only_dataset import (
+    MPDocVQADataset,
+    collate_fn_for_MPModel,
+    collate_fn_for_qwen_vl_lora,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +92,7 @@ def load_dataset(
 
 
 def load_tokenizer(
-    model_args: ModelArgumentsWithLora, data_args: DataTrainingArguments
+    model_args: ModelArguments, data_args: DataTrainingArguments
 ):
     tokenizer = QWenTokenizer.from_pretrained(
         model_args.tokenizer_name_or_path,
@@ -96,7 +106,8 @@ def load_tokenizer(
 
 
 def load_config(
-    model_args: ModelArgumentsWithLora,
+    model_args: ModelArguments,
+    training_args: TrainingArgumentsWithMyDefault,
 ):
     config = MPModelConfig.from_pretrained(
         model_args.config_name_or_path,
@@ -104,28 +115,29 @@ def load_config(
         classification_head_hidden_size=model_args.classification_head_hidden_size,
         num_pages=model_args.num_pages,
     )
-    config.fp16 = True
+    config.fp16 = training_args.fp16
+    config.bf16 = training_args.bf16
     config.use_cache = False
     return config
 
 
 def load_qwen_vl_model(
-    model_args: ModelArgumentsWithLora, config: MPModelConfig, device: str
+    model_args: ModelArguments, config: MPModelConfig, device: str
 ):
     qwen_vl = QWenLMHeadModel.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         config=config,
-        device_map=device,
+        device_map="auto",
     )
     return qwen_vl
 
 
 def main():
     parser = HfArgumentParser(
-        (ModelArgumentsWithLora, DataTrainingArguments, TrainingArgumentsWithMyDefault)
+        (ModelArguments, DataTrainingArguments, TrainingArgumentsWithMyDefault, LoraArguments)
     )
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    model_args, data_args, training_args, lora_args = parser.parse_args_into_dataclasses()
 
     # logging setting
     logging.basicConfig(
@@ -141,7 +153,8 @@ def main():
     transformers.utils.logging.enable_explicit_format()
 
     seed_everything(training_args.seed)
-    logger.info("current process device: %s" % training_args.device)
+    logger.info("training_args.device: %s" % training_args.device)
+    logger.info(f"bf16={training_args.bf16}, fp16={training_args.fp16}")
     # tokenizer
     tokenizer = load_tokenizer(model_args, data_args)
     # dataset
@@ -149,30 +162,42 @@ def main():
         training_args, data_args, tokenizer
     )
     assert train_dataset is not None
-    # collate_fn
-    # collator_fn = CollatorForEncoderDecoderModel(tokenizer=tokenizer)
 
     # model
     ## config
-    config = load_config(model_args)
-    qwen_vl = load_qwen_vl_model(model_args, config, training_args.device)
-    qwen_vl_lora = load_lora_qwen_vl_model(
-        qwen_vl=qwen_vl,
-        r=model_args.lora_rank,
-        lora_alpha=model_args.lora_alpha,
-        lora_dropout=model_args.lora_dropout,
-    )
-    model = MPModel(config=config, qwen_vl=qwen_vl_lora)
-    # trainer
+    config = load_config(model_args, training_args)
+    qwen_vl = load_qwen_vl_model(model_args, config, None)
+    if training_args.use_lora:
+        qwen_vl = load_lora_qwen_vl_model(
+            qwen_vl=qwen_vl,
+            r=lora_args.lora_r,
+            lora_alpha=lora_args.lora_alpha,
+            lora_dropout=lora_args.lora_dropout,
+        )
+    model: MPModel = MPModel(config=config, qwen_vl=qwen_vl)
+
+    model.print_trainable_parameters()
+
     trainer = MPModelTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         tokenizer=tokenizer,
-        data_collator=collate_fn_for_mp_doc_vqa,
+        data_collator=collate_fn_for_MPModel,
     )
     trainer.train()
+
+    # # trainer
+    # trainer = Trainer(
+    #     model=qwen_vl_lora,
+    #     args=training_args,
+    #     train_dataset=train_dataset,
+    #     eval_dataset=eval_dataset,
+    #     tokenizer=tokenizer,
+    #     data_collator=collate_fn_for_qwen_vl_lora,
+    # )
+    # trainer.train()
 
 
 if __name__ == "__main__":

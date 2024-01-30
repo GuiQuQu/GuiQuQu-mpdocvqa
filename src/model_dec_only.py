@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import torch
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 from transformers import PreTrainedModel
 from transformers.utils import ModelOutput
 from peft import get_peft_model, LoraConfig, LoraModel, TaskType
@@ -63,12 +64,18 @@ class MPModelOutput(ModelOutput):
 
 
 class MPModel(PreTrainedModel):
+    supports_gradient_checkpointing = True
     def __init__(self, config: MPModelConfig, qwen_vl: QWenLMHeadModel):
+        "qwen_vl is PretrainedModel or PeftModel"
         super().__init__(config)
+        self.config = config
         self.qwen_vl = qwen_vl
-        # if not hasattr(self.qwen_vl, "generation_config"):
-        #     raise ValueError("qwen_vl need has 'generation_config' attr to generate")
         self.head = ClassificationHeadForPageIndex(config)
+        self.gradient_checkpointing = False
+
+    def _set_gradient_checkpointing(self, module, value: bool = False):
+        if isinstance(module, MPModel):
+            module.gradient_checkpointing = value
 
     def get_cast_dtype(self):
         return next(self.parameters()).dtype
@@ -115,7 +122,12 @@ class MPModel(PreTrainedModel):
             qwen_vl_loss = qwen_vl_outputs.loss
 
         # classification head
-        head_loss, head_logits = self.head(last_hidden_state, page_idx_labels)
+        if self.gradient_checkpointing:
+            head_loss, head_logits = checkpoint(
+                self.head.__call__, last_hidden_state, page_idx_labels
+            )
+        else:
+            head_loss, head_logits = self.head(last_hidden_state, page_idx_labels)
         loss = None
         if head_loss is not None and qwen_vl_loss is not None:
             loss = qwen_vl_loss + head_loss
@@ -139,6 +151,40 @@ class MPModel(PreTrainedModel):
 
     def generate(self, **kwargs):
         self.qwen_vl.generate(**kwargs)
+
+    def get_nb_trainable_parameters(self):
+        r"""
+        Returns the number of trainable parameters and number of all parameters in the model.
+        """
+        # note: same as PeftModel.get_nb_trainable_parameters
+        trainable_params = 0
+        all_param = 0
+        for _, param in self.named_parameters():
+            num_params = param.numel()
+
+            # Due to the design of 4bit linear layers from bitsandbytes
+            # one needs to multiply the number of parameters by 2 to get
+            # the correct number of parameters
+            if param.__class__.__name__ == "Params4bit":
+                num_params = num_params * 2
+
+            all_param += num_params
+            if param.requires_grad:
+                trainable_params += num_params
+
+        return trainable_params, all_param
+
+    def print_trainable_parameters(self):
+        r"""
+        Prints the number of trainable parameters and number of all parameters in the model.
+        """
+        # note: same as PeftModel.print_trainable_parameters
+        trainable_params, all_param = self.get_nb_trainable_parameters()
+        print(
+            f"{self.__class__.__name__}: trainable params: {trainable_params:,d} || "
+            f"all params: {all_param:,d} || "
+            f"trainable%: {100 * trainable_params / all_param:.4f}"
+        )
 
 
 def load_lora_qwen_vl_model(

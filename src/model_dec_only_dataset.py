@@ -99,7 +99,7 @@ class MPDocVQADataset(Dataset):
         return prompt
 
 
-def collate_fn_for_mp_doc_vqa(batch):
+def collate_fn_for_MPModel(batch):
     """
     batch: List[Dict]
     """
@@ -114,6 +114,24 @@ def collate_fn_for_mp_doc_vqa(batch):
         "labels": labels.view(bsz, -1),
         "page_idx_labels": page_idx_labels.view(bsz),
     }
+
+
+def collate_fn_for_qwen_vl_lora(batch):
+    """
+    batch: List[Dict]
+    """
+    bsz = len(batch)
+    input_ids = torch.stack([item["input_ids"] for item in batch])
+    attention_mask = torch.stack([item["attention_mask"] for item in batch])
+    labels = torch.stack([item["labels"] for item in batch])
+    ret = {
+        "input_ids": input_ids.view(bsz, -1),
+        "attention_mask": attention_mask.view(bsz, -1),
+        "labels": labels.view(bsz, -1),
+    }
+    for k, v in ret.items():
+        logger.info(f"{k}: {v.size()}")
+    return ret
 
 
 def test_MPDocVQADataset():

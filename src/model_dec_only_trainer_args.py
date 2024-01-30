@@ -1,12 +1,13 @@
 """
     用于trainer4.py的训练参数
 """
-from typing import Optional
+from typing import Optional, List
 from dataclasses import dataclass, field
 
 import torch
 
 from transformers import TrainingArguments
+from transformers.utils import is_torch_bf16_gpu_available
 
 
 @dataclass
@@ -40,11 +41,11 @@ class TrainingArgumentsWithMyDefault(TrainingArguments):
         metadata={"help": ("Whether to run predictions on the test set.")},
     )
     bf16: bool = field(
-        default=False,
+        default=torch.cuda.is_available() and is_torch_bf16_gpu_available(),
         metadata={"help": ("Whether to use bf16.")},
     )
     fp16: bool = field(
-        default=True,
+        default=torch.cuda.is_available() and not is_torch_bf16_gpu_available(),
         metadata={"help": ("Whether to use fp16.")},
     )
     evaluation_strategy: str = field(
@@ -84,7 +85,7 @@ class TrainingArgumentsWithMyDefault(TrainingArguments):
         metadata={"help": ("The logging strategy to use.")},
     )
     logging_steps: int = field(
-        default=100,
+        default=20,
         metadata={"help": ("Log every X updates steps.")},
     )
     save_strategy: str = field(
@@ -94,6 +95,14 @@ class TrainingArgumentsWithMyDefault(TrainingArguments):
     report_to: str = field(
         default="tensorboard",
         metadata={"help": ("The report strategy to use.")},
+    )
+    use_lora: bool = field(
+        default=True,
+        metadata={"help": ("Whether to use lora.")},
+    )
+    gradient_checkpointing: bool = field(
+        default=False,
+        metadata={"help": ("Whether to use gradient checkpointing.")},
     )
 
 
@@ -132,18 +141,38 @@ class ModelArguments:
 
 
 @dataclass
-class ModelArgumentsWithLora(ModelArguments):
-    lora_rank: Optional[int] = field(
+class LoraArguments:
+    lora_r: int = field(
         default=1,
-        metadata={"help": "The rank of lora model."},
+        metadata={"help": ("The number of r.")},
     )
-    lora_alpha: Optional[float] = field(
-        default=32,
-        metadata={"help": "lora alpha."},
-    )
-    lora_dropout: Optional[float] = field(
+    lora_dropout: float = field(
         default=0.05,
-        metadata={"help": "lora dropout."},
+        metadata={"help": ("The dropout of lora.")},
+    )
+    lora_alpha: int = field(
+        default=16,
+        metadata={"help": ("The alpha of lora.")},
+    )
+    lora_target_modules: List[str] = field(
+        default_factory=lambda: [
+            "c_attn",
+            "attn.c_proj",
+            "w1",
+            "w2",
+        ]  ##["in_proj","out_proj","c_fc"]
+    )
+    lora_weight_path: str = field(
+        default="",
+        metadata={"help": ("The path of lora weight.")},
+    )
+    lora_bias: str = field(
+        default="none",
+        metadata={"help": ("The bias of lora.")},
+    )
+    q_lora: bool = field(
+        default=False,
+        metadata={"help": ("Whether to use q_lora.")},
     )
 
 
