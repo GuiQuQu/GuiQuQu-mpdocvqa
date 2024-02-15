@@ -106,7 +106,7 @@ class TrainingArgumentsWithMyDefault(TrainingArguments):
     )
 
 
-pretrained_model_name_or_path = "Qwen/Qwen-VL-Chat"
+pretrained_model_name_or_path = "/root/autodl-tmp/pretrained_model/Qwen-VL-Chat"
 
 
 @dataclass

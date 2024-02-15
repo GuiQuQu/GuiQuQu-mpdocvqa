@@ -1,9 +1,13 @@
 # 一键解压mpdocvqa数据
 # DATA_DIR="/home/klwang/code/python/mpdocvqa/data/MPDocVQA"
 DATA_DIR="/root/autodl-tmp/data"
+
 QAS_ZIP_FILE="qas.zip"
 IMAGE_TAR_FILE="images.tar.gz"
 OCR_TAR_FILE="ocr.tar.gz"
+
+MODEL_DIR="/root/autodl-tmp/pretrained-model"
+MODEL_TAR_FILE="Qwen-VL-Chat.tar.gz"
 
 cd $DATA_DIR
 if ! command -v unzip &> /dev/null; then
@@ -47,3 +51,14 @@ if [ $? -ne 0 ]; then
 else
     echo "解压完成，删除压缩包${OCR_TAR_FILE}完成"
 fi
+
+
+# 解压模型文件
+echo "正在解压 ${MODEL_TAR_FILE}..."
+tar -zxf $MODEL_DIR/${MODEL_TAR_FILE} -C $MODEL_DIR 1>/dev/null && rm $MODEL_DIR/${MODEL_TAR_FILE}
+if [ $? -ne 0 ]; then
+    echo "解压失败，请检查 ${MODEL_DIR}/${MODEL_TAR_FILE} 是否存在。"
+else
+    echo "解压完成，删除压缩包${MODEL_TAR_FILE}完成"
+fi
+
