@@ -5,6 +5,6 @@ log
 pretrain-model
 SimSun.ttf
 **/__pycache__
-outputs
-clip-outputs
+output**
+mpdocvqa-result
 **/.ipynb_checkpoints

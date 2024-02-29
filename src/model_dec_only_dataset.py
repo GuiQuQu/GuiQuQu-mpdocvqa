@@ -1,21 +1,186 @@
 """
     数据集
 """
-
+import os
+from typing import List, Dict
 import torch
 from torch.utils.data import Dataset
 from loguru import logger
 import json
 import random
 from pathlib import Path
+from transformers import PreTrainedTokenizer
+from transformers.trainer_pt_utils import LabelSmoother
 
 from qwen_vl import QWenTokenizer
 
+IGNORE_TOKEN_ID = LabelSmoother.ignore_index
 
 """
     用于model_dec_only.py的数据据
     利用clip模型对图像数据进行了过滤
+    
+    生成的数据类型
+    1. input_ids
+    2. targets (labels)
+    3. attention_mask
+
+    
+    raw_data
+     {
+            "questionId": 49153,
+            "question": "What is the ‘actual’ value per 1000, during the year 1975?",
+            "doc_id": "pybv0228",
+            "page_ids": [
+                "pybv0228_p80"
+            ],
+            "answers": [
+                "0.28"
+            ],
+            "answer_page_idx": 0,
+            "data_split": "val",
+            "filter_idx": [
+                0
+            ]
+    },
+
+    preprocess
+
+    input_id:
+    
+    <im_start>system\n
+    You are a helpful assistant.\n
+    Give you some documnet pictures, you can answer the question according to these document pictures.<im_end>\n
+    <im_start>user\n
+    Document Picture 1: <img>/root/autodl-tmp/data/images/pybv0228_p80.jpg</img>\n
+    Document Picture 2: <img>/root/autodl-tmp/data/images/pybv0228_p80.jpg</img>\n
+    What is the ‘actual’ value per 1000, during the year 1975?<im_end>\n
+    <|im_start|>assistant\n
+    0.28<im_end>\n
+    
+    target:
+    
+    <im_start> IGNORE_IDX(system\n + system_message) <im_end>\n
+    <im_start> IGNORE_IDX(user\n + prompt) <im_end>\n
+    <im_start> IGNORE_IDX(assistnat\n) ANSWER <im_end>\n
 """
+
+system_message = "You are a helpful assistant. Give you some documnet pictures, you can answer the question according to these document pictures."
+
+def preprocess(
+        data: List[dict],
+        tokenizer: PreTrainedTokenizer,
+        max_len: int,
+        image_dir: Path,
+        system_message: str = system_message
+) -> Dict:
+    roles = {"user": "<|im_start|>user", "assistant": "<|im_start|>assistant"}
+
+    im_start = tokenizer.im_start_id
+    im_end = tokenizer.im_end_id
+
+    nl_token = tokenizer("\n").input_ids
+    _system = tokenizer("system").input_ids + nl_token
+    _user = tokenizer("user").input_ids + nl_token
+    _assistant = tokenizer("assistant").input_ids + nl_token
+
+    def prepare_question(question: str, page_ids: List[str]):
+        prompt = ""
+        for idx, image_name in enumerate(page_ids):
+            image_path = os.path.join(image_dir, f"{image_name}.jpg")
+            prompt += f"Document Picture {idx+1}: <img>{image_path}</img>\n"
+        prompt = f"Question: {question}"
+        return prompt
+
+    input_ids, targets, page_idx_labels = [], [], []
+    for i, item in enumerate(data):
+        input_id, target = [], []
+
+        # system message
+        system = [im_start] + _system + \
+            tokenizer(system_message).input_ids + [im_end] + nl_token
+        input_id += system
+        target += [im_start] + [IGNORE_TOKEN_ID] * \
+            (len(system) - 3) + [im_end] + nl_token
+        assert len(input_id) == len(target)
+
+        # user message
+        question = item["question"]
+        # page_ids = item["page_ids"]
+        page_ids = item["filter_page_ids"]
+        answer = random.choice(item["answers"])
+        answer_page_idx = item["answer_page_idx"]
+        _input_id = tokenizer(roles["user"]).input_ids + nl_token \
+            + tokenizer(prepare_question(question, page_ids)).input_ids + \
+            [im_end] + nl_token
+        _target = [im_start] + [IGNORE_TOKEN_ID] * \
+            (len(_input_id) - 3) + [im_end] + nl_token
+        input_id += _input_id
+        target += _target
+        assert (len(input_id) == len(target))
+        # assistant message
+        _input_id = tokenizer(roles["assistant"]).input_ids + nl_token \
+            + tokenizer(answer).input_ids + [im_end] + nl_token
+        # [IGNORE_TOKEN_ID] * (len(tokenizer(roles["assistant"]).input_ids)-1+1)
+        _target = [im_start] + [IGNORE_TOKEN_ID] * len(tokenizer(roles["assistant"]).input_ids) + _input_id[len(
+            tokenizer(roles["assistant"]).input_ids) + 1:-2] + [im_end] + nl_token
+        input_id += _input_id
+        target += _target
+        assert len(input_id) == len(target)
+        input_id = input_id + [tokenizer.pad_token_id] * \
+            (max_len - len(input_id))
+        target = target + [IGNORE_TOKEN_ID] * (max_len - len(target))
+
+        input_ids.append(input_id[:max_len])
+        targets.append(target[:max_len])
+        page_idx_labels.append(answer_page_idx)
+
+    input_ids = torch.tensor(input_ids, dtype=torch.int)
+    labels = torch.tensor(targets, dtype=torch.int)
+    page_idx_labels = torch.tensor(
+        page_idx_labels, dtype=torch.int).view(-1, 1)
+    return dict(
+        input_ids=input_ids,
+        labels=labels,
+        attention_mask=input_ids.ne(tokenizer.pad_token_id),
+        page_idx_labels=page_idx_labels
+    )
+
+
+class LazyMPDocVQADataset(Dataset):
+    def __init__(self,
+                 raw_data: List[dict],
+                 tokenizer: PreTrainedTokenizer,
+                 max_len: int,
+                 image_dir: Path,
+                 system_message: str = "You are a helpful assistant.\nGive you some documnet pictures, you can answer the question according to these pictures"):
+
+        self.tokenizer = tokenizer
+        self.max_len = max_len
+        self.image_dir = image_dir
+        self.system_message = system_message
+        logger.info("Formatting inputs...Skip in lazy mode")
+        self.raw_data = raw_data
+        self.tokenizer = tokenizer
+        self.cached_data_dict = {}
+
+    def __len__(self):
+        return len(self.raw_data)
+
+    def __getitem__(self, i) -> Dict[str, torch.Tensor]:
+        if i in self.cached_data_dict:
+            return self.cached_data_dict[i]
+        ret = preprocess([self.raw_data[i]], self.tokenizer,
+                         self.max_len, self.image_dir, self.system_message)
+        ret = dict(
+            input_ids=ret["input_ids"][0],
+            labels=ret["labels"][0],
+            attention_mask=ret["attention_mask"][0],
+            page_idx_labels=ret["page_idx_labels"][0]
+        )
+        self.cached_data_dict[i] = ret
+
+        return ret
 
 
 class MPDocVQADataset(Dataset):

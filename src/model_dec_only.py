@@ -1,12 +1,11 @@
 """
     qwen-vl模型+分类头
 """
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from dataclasses import dataclass
 
 import torch
 from torch import nn
-from torch.utils.checkpoint import checkpoint
 from transformers import PreTrainedModel
 from transformers.utils import ModelOutput
 from peft import get_peft_model, LoraConfig, LoraModel, TaskType
@@ -63,8 +62,20 @@ class MPModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class MPModel(PreTrainedModel):
-    supports_gradient_checkpointing = True
+class MPPretrainedModel(PreTrainedModel):
+    config_class = MPModelConfig
+    base_model_prefix = "qwen_vl"
+
+    def __init__(self, config: MPModelConfig):
+        super().__init__(config)
+        self.config = config
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, MPModel):
+            module.gradient_checkpointing = value
+
+class MPModel(MPPretrainedModel):
+
     def __init__(self, config: MPModelConfig, qwen_vl: QWenLMHeadModel):
         "qwen_vl is PretrainedModel or PeftModel"
         super().__init__(config)
@@ -72,10 +83,6 @@ class MPModel(PreTrainedModel):
         self.qwen_vl = qwen_vl
         self.head = ClassificationHeadForPageIndex(config)
         self.gradient_checkpointing = False
-
-    def _set_gradient_checkpointing(self, module, value: bool = False):
-        if isinstance(module, MPModel):
-            module.gradient_checkpointing = value
 
     def get_cast_dtype(self):
         return next(self.parameters()).dtype
@@ -123,7 +130,7 @@ class MPModel(PreTrainedModel):
 
         # classification head
         if self.gradient_checkpointing:
-            head_loss, head_logits = checkpoint(
+            head_loss, head_logits = torch.utils.checkpoint(
                 self.head.__call__, last_hidden_state, page_idx_labels
             )
         else:
@@ -192,15 +199,18 @@ def load_lora_qwen_vl_model(
     r: int,
     lora_alpha: int,
     lora_dropout: float,
+    lora_target_modules: List[str],
+    lora_bias: str = "none",
     adapter_name: str = "default",
 ):
-    target_modules = ["c_attn", "c_proj"]
+    # target_modules = ["c_attn", "c_proj"]
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
         r=r,
         lora_alpha=lora_alpha,
         lora_dropout=lora_dropout,
-        target_modules=target_modules,
+        target_modules=lora_target_modules,
+        bias=lora_bias,
     )
     lora_model = get_peft_model(qwen_vl, lora_config, adapter_name=adapter_name)
     lora_model.print_trainable_parameters()

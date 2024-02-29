@@ -18,7 +18,7 @@ from dataset import MPDocVQADatasetForCLIP, CollatorForCLIP
 from eva02_clip import load_model_tokenizer_transform, ClipLoss
 
 from utils import seed_everything
-from trainer_clip_args import (
+from eva02_clip_trainer_args import (
     ModelArguments,
     DataTrainingArguments,
     TrainingArgumentsWithDefault,

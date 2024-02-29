@@ -1,3 +1,7 @@
+"""
+    弃用,转移到eva02_clip_eval.py文件中
+    利用训练好的clip模型来过滤图像，检索top-k个最有可能的图像
+"""
 import json
 from tqdm import tqdm
 from pathlib import Path

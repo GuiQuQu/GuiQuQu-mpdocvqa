@@ -9,6 +9,10 @@ import torch
 from transformers import TrainingArguments
 from transformers.utils import is_torch_bf16_gpu_available
 
+DATA_DIR = "/root/autodl-tmp/data"
+# pretrained_model_name_or_path = "/root/autodl-tmp/pretrained_model/Qwen-VL-Chat"
+pretrained_model_name_or_path = "/home/klwang/pretrain-model/Qwen-VL-Chat-Int4"
+cache_dir = "/home/klwang/pretrain-model"
 
 @dataclass
 class TrainingArgumentsWithMyDefault(TrainingArguments):
@@ -106,9 +110,6 @@ class TrainingArgumentsWithMyDefault(TrainingArguments):
     )
 
 
-pretrained_model_name_or_path = "/root/autodl-tmp/pretrained_model/Qwen-VL-Chat"
-
-
 @dataclass
 class ModelArguments:
     model_name_or_path: str = field(
@@ -125,7 +126,7 @@ class ModelArguments:
         metadata={"help": ("The name of the tokenizer.")},
     )
     cache_dir: Optional[str] = field(
-        default="/root/autodl-tmp/pretrain-model",
+        default=cache_dir,
         metadata={
             "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
         },
@@ -137,6 +138,10 @@ class ModelArguments:
     num_pages: Optional[int] = field(
         default=20,
         metadata={"help": ("The number of pages.")},
+    )
+    fix_vit: bool = field(
+        default=True,
+        metadata={"help": ("Whether to fix vit.")},
     )
 
 
@@ -171,12 +176,12 @@ class LoraArguments:
         metadata={"help": ("The bias of lora.")},
     )
     q_lora: bool = field(
-        default=False,
+        default=True,
         metadata={"help": ("Whether to use q_lora.")},
     )
 
 
-DATA_DIR = "/root/autodl-tmp/data"
+
 
 
 @dataclass

@@ -8,12 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 
 import transformers
-from transformers import (
-    Trainer,
-    HfArgumentParser,
-    TrainingArguments,
-    BitsAndBytesConfig,
-)
+from transformers import Trainer, HfArgumentParser, TrainingArguments, GPTQConfig
 
 from qwen_vl_chat import QWenTokenizer, QWenLMHeadModel, QWenConfig
 
@@ -29,7 +24,6 @@ from model_dec_only_trainer_args import (
 from model_dec_only_dataset import (
     MPDocVQADataset,
     collate_fn_for_MPModel,
-    collate_fn_for_qwen_vl_lora,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,9 +85,7 @@ def load_dataset(
     return train_dataset, eval_dataset, test_dataset
 
 
-def load_tokenizer(
-    model_args: ModelArguments, data_args: DataTrainingArguments
-):
+def load_tokenizer(model_args: ModelArguments, data_args: DataTrainingArguments):
     tokenizer = QWenTokenizer.from_pretrained(
         model_args.tokenizer_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -122,22 +114,38 @@ def load_config(
 
 
 def load_qwen_vl_model(
-    model_args: ModelArguments, config: MPModelConfig, device: str
+    model_args: ModelArguments,
+    training_args: TrainingArgumentsWithMyDefault,
+    lora_args: LoraArguments,
+    config: MPModelConfig,
 ):
     qwen_vl = QWenLMHeadModel.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         config=config,
         device_map="auto",
+        quantization_config=GPTQConfig(bits=4, disable_exllama=True)
+        if training_args.use_lora and lora_args.q_lora
+        else None,
     )
     return qwen_vl
 
 
 def main():
     parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArgumentsWithMyDefault, LoraArguments)
+        (
+            ModelArguments,
+            DataTrainingArguments,
+            TrainingArgumentsWithMyDefault,
+            LoraArguments,
+        )
     )
-    model_args, data_args, training_args, lora_args = parser.parse_args_into_dataclasses()
+    (
+        model_args,
+        data_args,
+        training_args,
+        lora_args,
+    ) = parser.parse_args_into_dataclasses()
 
     # logging setting
     logging.basicConfig(
@@ -166,16 +174,18 @@ def main():
     # model
     ## config
     config = load_config(model_args, training_args)
-    qwen_vl = load_qwen_vl_model(model_args, config, None)
+    qwen_vl = load_qwen_vl_model(model_args, training_args, lora_args, config)
+
     if training_args.use_lora:
         qwen_vl = load_lora_qwen_vl_model(
             qwen_vl=qwen_vl,
             r=lora_args.lora_r,
             lora_alpha=lora_args.lora_alpha,
             lora_dropout=lora_args.lora_dropout,
+            lora_target_modules=lora_args.lora_target_modules,
         )
     model: MPModel = MPModel(config=config, qwen_vl=qwen_vl)
-
+    
     model.print_trainable_parameters()
 
     trainer = MPModelTrainer(

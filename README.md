@@ -669,3 +669,11 @@ top-k-hit-rate: 59.06%
 2024-01-29 12:27:48.450 | INFO     | model_dec_only_dataset:collate_fn_for_qwen_vl_lora:133 - input_ids: torch.Size([1, 1024])
 2024-01-29 12:27:48.450 | INFO     | model_dec_only_dataset:collate_fn_for_qwen_vl_lora:133 - attention_mask: torch.Size([1, 1024])
 2024-01-29 12:27:48.451 | INFO     | model_dec_only_dataset:collate_fn_for_qwen_vl_lora:133 - labels: torch.Size([1, 1024])
+
+
+1. use_lora
+2. gradient_checkpointing
+3. lr_scheduler_type "cosine"
+4. model_max_length 2048
+5. bf16 True
+6. fix_vit True

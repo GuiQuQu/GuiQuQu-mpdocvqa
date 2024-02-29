@@ -20,7 +20,7 @@ import torch.multiprocessing as mp
 
 from transformers.optimization import get_scheduler
 
-from trainer_clip2_args import get_args
+from eva02_clip_trainer2_args import get_args
 
 logger = logging.getLogger(__name__)
 

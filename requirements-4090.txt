@@ -13,3 +13,13 @@ ipywidgets
 ipykernel
 open-clip-torch==2.23.0
 einops==0.6.1
+optimum
+auto-gptq
+accelerate
+scipy
+pillow
+matplotlib
+transformers_stream_generator==0.0.4
+torch-tb-profiler
+
+
