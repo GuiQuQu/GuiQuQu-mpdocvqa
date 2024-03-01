@@ -677,3 +677,19 @@ top-k-hit-rate: 59.06%
 4. model_max_length 2048
 5. bf16 True
 6. fix_vit True
+
+triplet loss
+
+L = max( d(anchor, positive) - d(anchor,negitive) + margin, 0)
+
+anchor is text(query)
+positive is ground truth image
+negitivte is random negitiva image
+
+model.encode_image(image)
+model.encode_text(text)
+
+input 
+query: [bsz, hidden_size]
+positive: [bsz, hidden_size]
+negitive: [bsz, hidden_size]

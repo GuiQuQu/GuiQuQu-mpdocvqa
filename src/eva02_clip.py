@@ -174,7 +174,19 @@ class ClipLoss(nn.Module):
         return total_loss, acc
 
 
-def main():
+class TripletLoss(nn.Module):
+    def __init__(self, margin:float):
+        super().__init__()
+        self.margin = margin
+
+    def forward(self, anchor_features, positive_features, negitive_features):
+        dist_a_p = torch.sum(anchor_features * positive_features,dim=-1) # [bsz]
+        dist_a_n = torch.sum(anchor_features* negitive_features, dim=-1) # [bsz]
+        loss = dist_a_p - dist_a_n + self.margin
+        loss = torch.where(loss > 0, loss, 0)
+        return loss.mean()
+
+def test_CLIP_model():
     logging.basicConfig(level=logging.INFO)
     model_name = "EVA02-L-14"
     cpkt_path = "../pretrain-model/eva02_large_patch14_clip_224.merged2b_s4b_b131k"
@@ -202,6 +214,13 @@ def main():
 
         print("Label probs:", text_probs)
 
-
+def test_TripletLoss():
+    loss_fct = TripletLoss(margin=0.5)
+    af = torch.rand(5,10)
+    pf = torch.rand(5,10)
+    nf = torch.rand(5,10)
+    loss = loss_fct(af,pf,nf)
+    print(loss)
+    
 if __name__ == "__main__":
-    main()
+    test_TripletLoss()

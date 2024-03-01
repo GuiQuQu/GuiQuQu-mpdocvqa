@@ -13,7 +13,7 @@ import transformers
 from transformers import Trainer, HfArgumentParser, TrainingArguments
 from transformers.trainer_utils import EvalLoopOutput
 
-from dataset import MPDocVQADatasetForCLIP, CollatorForCLIP
+from eva02_clip_dataset import MPDocVQADatasetForCLIP, CollatorForCLIP
 
 from eva02_clip import load_model_tokenizer_transform, ClipLoss
 
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class EVA02CLIPTrainer(Trainer):
-    def __init__(sself, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
     def get_train_dataloader(self) -> DataLoader:
