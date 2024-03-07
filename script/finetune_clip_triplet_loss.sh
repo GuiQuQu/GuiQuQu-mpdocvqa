@@ -16,9 +16,10 @@ python src/eva02_clip_triplet_trainer.py \
     --cpkt_path $MODEL \
     --train_json_path $TRAIN_DATA \
     --image_dir $IMAGE_DIR \
+    --output_dir output_clip_triplet \
     --bf16 True \
     --num_train_epochs 5 \
-    --per_device_train_batch_size 128 \
+    --per_device_train_batch_size 64 \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps 1 \
     --evaluation_strategy "no" \

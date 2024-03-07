@@ -12,7 +12,7 @@ today_date = datetime.now().strftime("%Y-%m-%d")
 @dataclass
 class TrainingArgumentsWithDefault(TrainingArguments):
     output_dir: str = field(
-        default=f"../clip-outputs/{today_date}",
+        default=f"../outputs_clip/{today_date}",
         metadata={
             "help": (
                 "The output directory where the model predictions and checkpoints will be written."

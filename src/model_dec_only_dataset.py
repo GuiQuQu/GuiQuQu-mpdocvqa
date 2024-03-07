@@ -153,7 +153,7 @@ class LazyMPDocVQADataset(Dataset):
                  tokenizer: PreTrainedTokenizer,
                  max_len: int,
                  image_dir: Path,
-                 system_message: str = "You are a helpful assistant.\nGive you some documnet pictures, you can answer the question according to these pictures"):
+                 system_message: str = "You are a helpful assistant.\nGive you some documnet pictures, you can answer the question according to these pictures."):
 
         self.tokenizer = tokenizer
         self.max_len = max_len

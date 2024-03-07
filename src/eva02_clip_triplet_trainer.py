@@ -16,7 +16,7 @@ from transformers import (
 
 from utils import seed_everything
 from eva02_clip import load_model_tokenizer_transform, TripletLoss
-from eva02_clip_dataset import TripletLossDataset
+from eva02_clip_dataset import TripletLossDataset,collate_fn_for_merge_dict
 
 today_date = datetime.now().strftime("%Y-%m-%d")
 
@@ -72,7 +72,7 @@ class EVA02TripletLossTrainer(Trainer):
         anchor_features = model.encode_text(inputs["text"], normalize=True)
         positive_features = model.encode_image(
             inputs["positivate_image"], normalize=True)
-        negitiva_features = model.encode_image(
+        negitiva_features = model.encode_image(  
             inputs["negitive_image"], normalize=True)
         loss = triplet_loss_fct(anchor_features,positive_features,negitiva_features)
         return loss
@@ -116,7 +116,8 @@ def main():
     trainer = EVA02TripletLossTrainer(
         model=model,
         args=training_args,
-        train_dataset=train_dataset
+        train_dataset=train_dataset,
+        data_collator=collate_fn_for_merge_dict,
     )
 
     trainer.train()

@@ -12,7 +12,7 @@ from transformers import AutoTokenizer
 
 from metrics import anls
 
-system_message = "You are a helpful assistant."
+system_message = "You are a helpful assistant.\nGive you some documnet pictures, you can answer the question according to these pictures."
 
 def get_args():
     parser = argparse.ArgumentParser(
